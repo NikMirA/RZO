@@ -1,1 +1,71 @@
-1
+#include <iostream>
+#include <opencv2/opencv.hpp>
+#include <opencv2/imgproc.hpp>
+#include <opencv2/highgui.hpp>
+
+using namespace std;
+using namespace cv;
+
+int main() {
+    // ЧЁРНЫЙ ХОЛСТ
+    Mat canvas(500, 800, CV_8UC3, Scalar(0, 0, 0));
+
+    // ЛИНИЯ
+    line(canvas, Point(50, 50), Point(750, 450), Scalar(255, 0, 0), 3);
+
+    // ПРЯМОУГОЛЬНИК
+    rectangle(canvas, Point(200, 150), Point(400, 300), Scalar(0, 255, 0), 2);
+
+    // ОКРУЖНОСТЬ
+    circle(canvas, Point(600, 200), 50, Scalar(0, 0, 255), -1);
+
+    // ЭЛЛИПС
+    ellipse(canvas, Point(400, 400), Size(150, 70), 30, 0, 360, Scalar(0, 255, 255), 2);
+
+    // МНОГОУГОЛЬНИК =====
+    vector<Point> pts = {
+        Point(500, 100),
+        Point(600, 150),
+        Point(650, 250),
+        Point(550, 300),
+        Point(450, 200)
+    };
+    polylines(canvas, pts, true, Scalar(255, 255, 0), 2);
+
+    imwrite("drawing_result.jpg", canvas);
+    cout << "Static image saved: drawing_result.jpg" << endl;
+
+    // АНИМАЦИЯ
+    string text = "Mirolyubov 22-PM-1";
+    int textX = 20;          // Начальная позиция по X
+    int textY = 470;         // Позиция по Y
+    int speedX = 3;          // Скорость по X
+    int speedY = 2;          // Скорость по Y
+
+    cout << "\nAnimation started!" << endl;
+    cout << "Press ESC to exit." << endl;
+
+    while (true) {
+        Mat frame = canvas.clone();
+        putText(frame, text, Point(textX, textY),
+            FONT_HERSHEY_SIMPLEX, 1.0, Scalar(255, 255, 255), 2);
+
+        textX += speedX;
+        textY += speedY;
+
+        if (textX > 800 - 350) speedX = -speedX;
+        if (textX < 20) speedX = -speedX;
+
+        if (textY > 480) speedY = -speedY;
+        if (textY < 30) speedY = -speedY;
+
+        imshow("Animation (ESC to exit)", frame);
+
+        if (waitKey(30) == 27) break;
+    }
+
+    destroyAllWindows();
+    cout << "Animation finished." << endl;
+
+    return 0;
+}
