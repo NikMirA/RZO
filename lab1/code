@@ -1,0 +1,61 @@
+#include <iostream>
+#include <opencv2/opencv.hpp>
+#include <opencv2/imgproc.hpp>
+#include <opencv2/highgui.hpp>
+
+using namespace std;
+using namespace cv;
+
+int main() {
+    string imagePath = "hamster.jpg";
+
+    Mat img = imread(imagePath);
+
+    if (img.empty()) {
+        cout << "Error: could not load image!" << endl;
+        cout << "Path: " << imagePath << endl;
+        cout << "Press Enter to exit...";
+        cin.get();
+        return -1;
+    }
+
+    cout << "Image loaded. Size: " << img.cols << "x" << img.rows << endl;
+
+    // ===== 1. ORIGINAL =====
+    imshow("1. Original", img);
+
+    // ===== 2. RESIZED =====
+    Mat resized;
+    resize(img, resized, Size(), 0.5, 0.5);
+    imshow("2. Resized (50%)", resized);
+
+    // ===== 3. ROTATED 90 =====
+    Mat rotated;
+    rotate(img, rotated, ROTATE_90_CLOCKWISE);
+    imshow("3. Rotated 90", rotated);
+
+    // ===== 4. GRAY =====
+    Mat gray;
+    cvtColor(img, gray, COLOR_BGR2GRAY);
+    imshow("4. Gray", gray);
+
+    // ===== 5. BLURRED =====
+    Mat blurred;
+    GaussianBlur(img, blurred, Size(15, 15), 0);
+    imshow("5. Blurred", blurred);
+
+    // ===== SAVE RESULTS =====
+    imwrite("original.jpg", img);
+    imwrite("resized.jpg", resized);
+    imwrite("rotated_90.jpg", rotated);
+    imwrite("gray.jpg", gray);
+    imwrite("blurred.jpg", blurred);
+
+    cout << "\nFiles saved!" << endl;
+
+    cout << "\nPress any key to close all windows..." << endl;
+    waitKey(0);
+    destroyAllWindows();
+
+    return 0;
+}
