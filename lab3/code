@@ -1,1 +1,84 @@
-1
+#include <iostream>
+#include <opencv2/opencv.hpp>
+#include <opencv2/imgproc.hpp>
+#include <opencv2/highgui.hpp>
+
+using namespace std;
+using namespace cv;
+
+// Функция для отображения и сохранения
+void showAndSave(Mat& image, string name) {
+    imshow(name, image);
+    imwrite(name + ".jpg", image);
+    cout << "Saved: " << name << ".jpg" << endl;
+}
+
+int main() {
+    string imagePath = "Lab3_image.png"; 
+    Mat image = imread(imagePath);
+
+    if (image.empty()) {
+        cout << "Error: could not load image!" << endl;
+        cout << "Path: " << imagePath << endl;
+        return -1;
+    }
+
+    cout << "Image loaded. Size: " << image.cols << "x" << image.rows << endl;
+
+    // В HSV 
+    Mat hsv;
+    cvtColor(image, hsv, COLOR_BGR2HSV);
+
+    //  ОРИГИНАЛ
+    showAndSave(image, "01_Original");
+
+
+    // КРАСНЫЙ
+    Mat red_mask1, red_mask2, red_mask;
+    inRange(hsv, Scalar(0, 100, 100), Scalar(10, 255, 255), red_mask1);
+    inRange(hsv, Scalar(170, 100, 100), Scalar(180, 255, 255), red_mask2);
+    red_mask = red_mask1 | red_mask2;  // Объединяем
+
+    // СИНИЙ 
+    Mat blue_mask;
+    inRange(hsv, Scalar(90, 100, 100), Scalar(130, 255, 255), blue_mask);
+
+    // ЗЕЛЁНЫЙ
+    Mat green_mask;
+    inRange(hsv, Scalar(40, 100, 100), Scalar(80, 255, 255), green_mask);
+
+    // ЖЁЛТЫЙ
+    Mat yellow_mask;
+    inRange(hsv, Scalar(20, 100, 100), Scalar(35, 255, 255), yellow_mask);
+
+    // ПОКАЗЫВАЕМ МАСКИ
+    showAndSave(red_mask, "02_Red_Mask");
+    showAndSave(blue_mask, "03_Blue_Mask");
+    showAndSave(green_mask, "04_Green_Mask");
+    showAndSave(yellow_mask, "05_Yellow_Mask");
+
+    // ПРИМЕНЯЕМ
+    Mat red_result, blue_result, green_result, yellow_result;
+    image.copyTo(red_result, red_mask);
+    image.copyTo(blue_result, blue_mask);
+    image.copyTo(green_result, green_mask);
+    image.copyTo(yellow_result, yellow_mask);
+
+    // ПОКАЗЫВАЕМ РЕЗУЛЬТАТЫ
+    showAndSave(red_result, "06_Red_Objects");
+    showAndSave(blue_result, "07_Blue_Objects");
+    showAndSave(green_result, "08_Green_Objects");
+    showAndSave(yellow_result, "09_Yellow_Objects");
+
+    // ВСЕ НА ОДНОМ ЭКРАНЕ
+    Mat all_results;
+    image.copyTo(all_results, red_mask | blue_mask | green_mask | yellow_mask);
+    showAndSave(all_results, "10_All_Colored_Objects");
+
+    cout << "Press any key to close all windows..." << endl;
+
+    waitKey(0);
+    destroyAllWindows();
+
+    return 0;
+}
