@@ -1,1 +1,201 @@
-5
+#include <iostream>
+#include <opencv2/opencv.hpp>
+#include <opencv2/imgproc.hpp>
+#include <opencv2/highgui.hpp>
+
+using namespace std;
+using namespace cv;
+
+// Определение типа фигуры по контуру
+string detectShape(const vector<Point>& contour) {
+    double perimeter = arcLength(contour, true);
+    if (perimeter < 10) return "Unknown";
+
+    vector<Point> approx;
+    approxPolyDP(contour, approx, 0.04 * perimeter, true);
+
+    int vertices = approx.size();
+    double area = contourArea(contour);
+    double circularity = 4 * CV_PI * area / (perimeter * perimeter);
+
+    if (circularity > 0.85 && vertices > 6) {
+        return "Circle";
+    }
+
+    if (vertices == 4) {
+        Rect rect = boundingRect(contour);
+        double aspectRatio = (double)rect.width / rect.height;
+        if (aspectRatio > 0.8 && aspectRatio < 1.2) {
+            return "Square";
+        }
+        return "Rectangle";
+    }
+
+    if (vertices == 3) {
+        return "Triangle";
+    }
+
+    return "Unknown";
+}
+
+int main() {
+    string videoPath = "Motion.mkv"; 
+
+    VideoCapture cap(videoPath);
+
+    if (!cap.isOpened()) {
+        cout << "Error: could not open video!" << endl;
+        cout << "Path: " << videoPath << endl;
+        cout << "\nTrying alternative names..." << endl;
+
+        cap.open("Lab6_video.mkv");
+        if (!cap.isOpened()) cap.open("video.mp4");
+        if (!cap.isOpened()) cap.open("motion.mp4");
+
+        if (!cap.isOpened()) {
+            cout << "Video not found. Press Enter to exit...";
+            cin.get();
+            return -1;
+        }
+    }
+
+    // Информация о видео
+    double fps = cap.get(CAP_PROP_FPS);
+    double frameCount = cap.get(CAP_PROP_FRAME_COUNT);
+    double width = cap.get(CAP_PROP_FRAME_WIDTH);
+    double height = cap.get(CAP_PROP_FRAME_HEIGHT);
+
+    cout << "Video opened!" << endl;
+    cout << "  FPS: " << fps << endl;
+    cout << "  Frames: " << frameCount << endl;
+    cout << "  Resolution: " << width << "x" << height << endl;
+    cout << "\nControls:" << endl;
+    cout << "  SPACE — pause/resume" << endl;
+    cout << "  ESC   — exit" << endl;
+
+    Mat frame;
+    bool paused = false;
+    int frameNumber = 0;
+    int bestFrame = 0;
+    int maxShapes = 0;
+    Mat bestResult;
+
+    //ОБРАБОТКА ВИДЕО
+    while (true) {
+        if (!paused) {
+            cap >> frame;  // Читаем кадр
+            if (frame.empty()) {
+                cout << "End of video." << endl;
+                break;
+            }
+            frameNumber++;
+        }
+
+        // ПРЕДОБРАБОТКА КАДРА 
+        Mat gray, blurred, edges, closed;
+
+        // в серый
+        cvtColor(frame, gray, COLOR_BGR2GRAY);
+
+        // Размываем
+        medianBlur(gray, blurred, 5);
+
+        // Детектор границ Canny
+        Canny(blurred, edges, 30, 90);
+
+        Mat kernel = getStructuringElement(MORPH_ELLIPSE, Size(5, 5));
+        morphologyEx(edges, closed, MORPH_CLOSE, kernel);
+
+        // ПОИСК КОНТУРОВ
+        vector<vector<Point>> contours;
+        findContours(closed, contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
+
+        // АНАЛИЗ КОНТУРОВ
+        Mat result = frame.clone();
+        int shapeCount = 0;
+        bool hasCircle = false, hasSquare = false, hasTriangle = false;
+
+        for (const auto& contour : contours) {
+            double area = contourArea(contour);
+
+            // Фильтруем слишком маленькие и слишком большие
+            if (area < 100 || area > 50000) continue;
+
+            string shapeName = detectShape(contour);
+            if (shapeName == "Unknown") continue;
+
+            // Отмечаем, какие фигуры найдены
+            if (shapeName == "Circle") { hasCircle = true; shapeCount++; }
+            if (shapeName == "Square") { hasSquare = true; shapeCount++; }
+            if (shapeName == "Triangle") { hasTriangle = true; shapeCount++; }
+
+            Scalar color;
+            if (shapeName == "Circle")      color = Scalar(255, 0, 0);    // Синий
+            else if (shapeName == "Square") color = Scalar(0, 255, 0);    // Зелёный
+            else if (shapeName == "Triangle") color = Scalar(0, 0, 255);  // Красный
+            else continue;
+
+            Rect bbox = boundingRect(contour);
+            rectangle(result, bbox, color, 2);
+
+            // Подписываем фигуру в центре
+            Point center(bbox.x + bbox.width / 2, bbox.y + bbox.height / 2);
+
+            int baseline = 0;
+            Size textSize = getTextSize(shapeName, FONT_HERSHEY_SIMPLEX, 0.7, 2, &baseline);
+            Point textPos(center.x - textSize.width / 2, center.y + textSize.height / 2);
+
+            putText(result, shapeName, textPos,
+                FONT_HERSHEY_SIMPLEX, 0.7, color, 2, LINE_AA);
+        }
+
+        // СОХРАНЯЕМ ЛУЧШИЙ КАДР
+        if (shapeCount > maxShapes && hasCircle && hasSquare && hasTriangle) {
+            maxShapes = shapeCount;
+            bestFrame = frameNumber;
+            result.copyTo(bestResult);
+        }
+
+        // Счётчик фигур на экране
+        putText(result, "Shapes: " + to_string(shapeCount), Point(10, 30),
+            FONT_HERSHEY_SIMPLEX, 0.8, Scalar(255, 255, 255), 2);
+        putText(result, "Frame: " + to_string(frameNumber), Point(10, 60),
+            FONT_HERSHEY_SIMPLEX, 0.8, Scalar(255, 255, 255), 2);
+
+        if (paused) {
+            putText(result, "PAUSED (SPACE to resume)", Point(10, 90),
+                FONT_HERSHEY_SIMPLEX, 0.7, Scalar(0, 255, 255), 2);
+        }
+
+        namedWindow("Shape Detection", WINDOW_NORMAL);
+        resizeWindow("Shape Detection", 800, 600);
+        imshow("Shape Detection", result);
+
+        namedWindow("Edges", WINDOW_NORMAL);
+        resizeWindow("Edges", 400, 300);
+        imshow("Edges", closed);
+
+        char key = (char)waitKey(30);
+        if (key == 27) { 
+            cout << "\nExit by user." << endl;
+            break;
+        }
+        else if (key == ' ') { 
+            paused = !paused;
+        }
+    }
+
+    if (!bestResult.empty()) {
+        imwrite("best_frame.jpg", bestResult);
+        cout << "\nBest frame saved: best_frame.jpg" << endl;
+        cout << "  Frame: #" << bestFrame << endl;
+        cout << "  Shapes detected: " << maxShapes << endl;
+    }
+
+    cap.release();
+    destroyAllWindows();
+
+    cout << "\nPress Enter to exit...";
+    cin.get();
+    return 0;
+}
