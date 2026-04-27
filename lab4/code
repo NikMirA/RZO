@@ -1,1 +1,165 @@
-lab4
+#define _CRT_SECURE_NO_WARNINGS
+#include <iostream>
+#include <opencv2/opencv.hpp>
+#include <opencv2/imgproc.hpp>
+#include <opencv2/highgui.hpp>
+
+using namespace std;
+using namespace cv;
+
+// Вспомогательная функция
+void showAndSave(Mat& img, string name, int maxWidth = 800, int maxHeight = 600) {
+    namedWindow(name, WINDOW_NORMAL);
+    int winWidth = img.cols;
+    int winHeight = img.rows;
+
+    if (winWidth > maxWidth) {
+        float scale = (float)maxWidth / winWidth;
+        winWidth = maxWidth;
+        winHeight = (int)(winHeight * scale);
+    }
+
+    if (winHeight > maxHeight) {
+        float scale = (float)maxHeight / winHeight;
+        winHeight = maxHeight;
+        winWidth = (int)(winWidth * scale);
+    }
+
+    resizeWindow(name, winWidth, winHeight);
+    imshow(name, img);
+    imwrite(name + ".jpg", img);
+    cout << "Saved: " << name << ".jpg" << endl;
+}
+
+// Определение названия фигуры по контуру
+string getShapeName(vector<Point>& contour, double area, double perimeter) {
+    vector<Point> approx;
+    approxPolyDP(contour, approx, 0.02 * perimeter, true);
+
+    int vertices = approx.size();
+
+    // Круг — много вершин + высокая округлость
+    double circularity = 4 * CV_PI * area / (perimeter * perimeter);
+
+    if (vertices > 10 && circularity > 0.85) {
+        return "Circle";
+    }
+
+    if (vertices == 3) {
+        return "Triangle";
+    }
+    else if (vertices == 4) {
+        // Определяем, квадрат или прямоугольник
+        Rect rect = boundingRect(contour);
+        float aspectRatio = (float)rect.width / rect.height;
+
+        if (aspectRatio > 0.9 && aspectRatio < 1.1) {
+            return "Square";
+        }
+        else {
+            return "Rectangle";
+        }
+    }
+    else if (vertices == 5) {
+        return "Pentagon";
+    }
+    else if (vertices == 6) {
+        return "Hexagon";
+    }
+    else if (circularity > 0.7) {
+        return "Ellipse";
+    }
+    else {
+        return "Polygon (" + to_string(vertices) + ")";
+    }
+}
+
+int main() {
+    string imagePath = "Lab4_image.png";
+    Mat img = imread(imagePath);
+
+    if (img.empty()) {
+        cout << "Error: could not load image!" << endl;
+        cout << "Path: " << imagePath << endl;
+        return -1;
+    }
+
+    cout << "Image loaded. Size: " << img.cols << "x" << img.rows << endl;
+    showAndSave(img, "01_Original");
+
+    // ПРЕДОБРАБОТКА 
+    Mat gray, blurred, binary;
+
+    //  в серый
+    cvtColor(img, gray, COLOR_BGR2GRAY);
+
+    // Размываем для удаления шумов
+    GaussianBlur(gray, blurred, Size(5, 5), 0);
+
+    // чёрно-белое
+    threshold(blurred, binary, 127, 255, THRESH_BINARY_INV);
+    // THRESH_BINARY_INV — инвертируем, чтобы фигуры стали белыми
+
+    showAndSave(binary, "02_Binary");
+
+    // ПОИСК КОНТУРОВ
+    vector<vector<Point>> contours;
+    vector<Vec4i> hierarchy;
+
+    findContours(binary, contours, hierarchy,
+        RETR_EXTERNAL,          // Только внешние контуры
+        CHAIN_APPROX_SIMPLE);    // Сжатое представление
+
+    cout << "\nFound " << contours.size() << " contours\n" << endl;
+
+    // АНАЛИЗ КАЖДОГО КОНТУРА 
+    Mat result = img.clone();
+
+    int count = 1;
+    for (auto& contour : contours) {
+        // мелкие контуры (шум)
+        double area = contourArea(contour);
+        if (area < 500) continue;
+
+        // Периметр
+        double perimeter = arcLength(contour, true);
+
+        // Центр масс
+        Moments m = moments(contour);
+        Point2f center(m.m10 / m.m00, m.m01 / m.m00);
+
+        // Определяем тип фигуры
+        string shapeName = getShapeName(contour, area, perimeter);
+
+        // Рисуем контур зелёным
+        drawContours(result, vector<vector<Point>>{contour}, -1,
+            Scalar(0, 255, 0), 2);
+
+        // Рисуем центр масс красной точкой
+        circle(result, center, 4, Scalar(0, 0, 255), -1);
+
+        char label[100];
+        sprintf_s(label, sizeof(label), "%s P=%.0f", shapeName.c_str(), perimeter);
+
+        // Подписываем фигуру
+        putText(result, label, Point(center.x - 40, center.y),
+            FONT_HERSHEY_SIMPLEX, 0.5, Scalar(0, 0, 0), 2);
+
+        cout << "Shape #" << count << ": " << shapeName << endl;
+        cout << "  Area: " << area << endl;
+        cout << "  Perimeter: " << perimeter << endl;
+        cout << "  Center: (" << center.x << ", " << center.y << ")" << endl;
+        cout << endl;
+
+        count++;
+    }
+
+    // ПОКАЗЫВАЕМ И СОХРАНЯЕМ РЕЗУЛЬТАТ 
+    showAndSave(result, "03_Result");
+
+    cout << "Press any key to close all windows..." << endl;
+    waitKey(0);
+    destroyAllWindows();
+
+    return 0;
+}
